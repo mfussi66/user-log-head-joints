@@ -40,6 +40,7 @@ struct DataExperiment {
   double pwm;
   double pid_out;
   double enc;
+  double ref;
 };
 
 constexpr int PITCH_JOINT_ID = 0;
@@ -78,6 +79,8 @@ int main(int argc, char* argv[]) {
   yarp::dev::PolyDriver driver;
   yarp::dev::IEncoders* iEnc{nullptr};
 
+  yarp::dev::IPositionControl* iPosCtrl{nullptr};
+
   yarp::os::Property conf;
   conf.put("device", "remote_controlboard");
   conf.put("remote", remote);
@@ -87,11 +90,16 @@ int main(int argc, char* argv[]) {
     return EXIT_FAILURE;
   }
   if (!(driver.view(iEnc))) {
-    yError() << "Failed to open interfaces";
+    yError() << "Failed to open encoder interface";
     driver.close();
     return EXIT_FAILURE;
   }
 
+  if (!(driver.view(iPosCtrl))) {
+    yError() << "Failed to open position control interface";
+    driver.close();
+    return EXIT_FAILURE;
+  }
 
   // Open I/O resources 
   std::ofstream roll_fout, pitch_fout;
@@ -128,10 +136,14 @@ int main(int argc, char* argv[]) {
     
     // pitch
     iEnc->getEncoder(PITCH_JOINT_ID, &pitch_d.enc);
-    yInfo() << "Pitch encoder: " << pitch_d.enc << "; Roll encoder: " << roll_d.enc;
+
+    iPosCtrl->getTargetPosition(ROLL_JOINT_ID, &roll_d.ref);
+    iPosCtrl->getTargetPosition(PITCH_JOINT_ID, &pitch_d.ref);
+
+    yInfo() << "Pitch ref: " << pitch_d.ref << " enc: " << pitch_d.enc << "; Roll ref: " << roll_d.ref << " enc: " << roll_d.enc;
 
     // save data
-    roll_data.push_back(std::move(roll_d));      
+    roll_data.push_back(std::move(roll_d));
     pitch_data.push_back(std::move(pitch_d));
 
     yarp::os::Time::delay(Ts);
@@ -142,21 +154,23 @@ int main(int argc, char* argv[]) {
     
     
   // write down roll data
-  for (const auto& d : roll_data) {
+  for (const auto & d : roll_data) {
     roll_fout << d.t << ","
         << d.pid_out << ","
         << d.pwm << ","
-        << d.enc << std::endl;
+        << d.enc << ","
+        << d.ref << std::endl;
   }
   
   yInfo() << "Saved roll data";
 
   // write down pitch data
-  for (const auto& d : pitch_data) {
+  for (const auto & d : pitch_data) {
       pitch_fout << d.t << ","
         << d.pid_out << ","
         << d.pwm << ","
-        << d.enc << std::endl;
+        << d.enc << ","
+        << d.ref << std::endl;
   }
   
   yInfo() << "Saved pitch data";
