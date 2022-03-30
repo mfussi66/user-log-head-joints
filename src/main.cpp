@@ -41,6 +41,7 @@ struct DataExperiment {
   double pid_out;
   double enc;
   double ref;
+  double err;
 };
 
 constexpr int PITCH_JOINT_ID = 0;
@@ -79,7 +80,7 @@ int main(int argc, char* argv[]) {
   yarp::dev::PolyDriver driver;
   yarp::dev::IEncoders* iEnc{nullptr};
 
-  yarp::dev::IPositionControl* iPosCtrl{nullptr};
+  yarp::dev::IPidControl* iPidCtrl{nullptr};
 
   yarp::os::Property conf;
   conf.put("device", "remote_controlboard");
@@ -95,7 +96,7 @@ int main(int argc, char* argv[]) {
     return EXIT_FAILURE;
   }
 
-  if (!(driver.view(iPosCtrl))) {
+  if (!(driver.view(iPidCtrl))) {
     yError() << "Failed to open position control interface";
     driver.close();
     return EXIT_FAILURE;
@@ -137,8 +138,12 @@ int main(int argc, char* argv[]) {
     // pitch
     iEnc->getEncoder(PITCH_JOINT_ID, &pitch_d.enc);
 
-    iPosCtrl->getTargetPosition(ROLL_JOINT_ID, &roll_d.ref);
-    iPosCtrl->getTargetPosition(PITCH_JOINT_ID, &pitch_d.ref);
+    iPidCtrl->getPidReference(yarp::dev::VOCAB_PIDTYPE_POSITION, ROLL_JOINT_ID, &roll_d.ref);
+    iPidCtrl->getPidReference(yarp::dev::VOCAB_PIDTYPE_POSITION, PITCH_JOINT_ID, &pitch_d.ref);
+
+
+    iPidCtrl->getPidError(yarp::dev::VOCAB_PIDTYPE_POSITION, ROLL_JOINT_ID, &roll_d.err);
+    iPidCtrl->getPidError(yarp::dev::VOCAB_PIDTYPE_POSITION, PITCH_JOINT_ID, &pitch_d.err);
 
     yInfo() << "Pitch ref: " << pitch_d.ref << " enc: " << pitch_d.enc << "; Roll ref: " << roll_d.ref << " enc: " << roll_d.enc;
 
@@ -159,7 +164,8 @@ int main(int argc, char* argv[]) {
         << d.pid_out << ","
         << d.pwm << ","
         << d.enc << ","
-        << d.ref << std::endl;
+        << d.ref << ","
+        << d.err << std::endl;
   }
   
   yInfo() << "Saved roll data";
@@ -170,7 +176,8 @@ int main(int argc, char* argv[]) {
         << d.pid_out << ","
         << d.pwm << ","
         << d.enc << ","
-        << d.ref << std::endl;
+        << d.ref << ","
+        << d.err << std::endl;
   }
   
   yInfo() << "Saved pitch data";
