@@ -71,7 +71,7 @@ int main(int argc, char* argv[]) {
   auto remote = rf.check("remote", yarp::os::Value("/nwa/wrist_mc")).asString();
   auto roll_filename  = rf.check("filename", yarp::os::Value("yaw_cmd.log")).asString();  // log roll data
   // auto pitch_filename = rf.check("file-name-pitch", yarp::os::Value("pitch_output.log")).asString();  // log pitch data
-  auto Ts = rf.check("Ts", yarp::os::Value(.01)).asFloat64();
+  auto Ts = rf.check("Ts", yarp::os::Value(0.001)).asFloat64();
 
   yarp::dev::PolyDriver driver;
   yarp::dev::IEncoders* iEnc{nullptr};
@@ -120,15 +120,15 @@ int main(int argc, char* argv[]) {
   // Write column names
 
   roll_fout << "Time" << ","
-        << "Yaw" << ","
-        << "Roll" << ","
-        << "Pitch" << ","
-        << "Yaw_Ref" << ","
-        << "Roll_Ref" << ","
-        << "Pitch_Ref" << ","
-        << "Yaw_Err" << ","
-        << "Roll_Err" << ","
-        << "Pitch_Err" << std::endl;
+        << "Mot1" << ","
+        << "Mot2" << ","
+        << "Mot3" << ","
+        << "Mot1_Ref" << ","
+        << "Mot2_Ref" << ","
+        << "Mot3_Ref" << ","
+        << "Mot1_Err" << ","
+        << "Mot2_Err" << ","
+        << "Mot3_Err" << std::endl;
 
   // if (!pitch_fout.is_open()) {
   //   yError() << "Failed to open" << pitch_filename;
@@ -141,7 +141,7 @@ int main(int argc, char* argv[]) {
   std::vector<DataExperiment> pitch_data;
   auto check_conditions{0};
   auto t0 = yarp::os::Time::now();
-
+  yInfo() << "Started recording...";
   // Log data only
   while(!TERMINATED){
     DataExperiment yaw_d;
@@ -171,9 +171,9 @@ int main(int argc, char* argv[]) {
     iPidCtrl->getPidOutput(yarp::dev::VOCAB_PIDTYPE_POSITION, 1, &roll_d.pwm);
     iPidCtrl->getPidOutput(yarp::dev::VOCAB_PIDTYPE_POSITION, 2, &pitch_d.pwm);
 
-    yInfo() << "Roll PID ref: " << roll_d.ref << " PID err: " << roll_d.err << "tg: " << roll_d.target  << " enc: " << roll_d.enc;
-    yInfo() << "Pitch PID ref: " << pitch_d.ref << " PID err: " << pitch_d.err << "tg: " << pitch_d.target << " enc: " << pitch_d.enc;
-    yInfo() << "Yaw PID ref: " << yaw_d.ref << " PID err: " << yaw_d.err << "tg: " << yaw_d.target << " enc: " << yaw_d.enc;
+    //yInfo() << "Roll PID ref: " << roll_d.ref << " PID err: " << roll_d.err << "pwm: " << roll_d.pwm  << " enc: " << roll_d.enc;
+    //yInfo() << "Pitch PID ref: " << pitch_d.ref << " PID err: " << pitch_d.err << "pwm: " << pitch_d.pwm << " enc: " << pitch_d.enc;
+    //yInfo() << "Yaw PID ref: " << yaw_d.ref << " PID err: " << yaw_d.err << "pwm: " << yaw_d.pwm << " enc: " << yaw_d.enc;
 
     // save data
     yaw_data.push_back(std::move(yaw_d));
@@ -189,9 +189,9 @@ int main(int argc, char* argv[]) {
 
   for(uint32_t i = 0; i < roll_data.size(); ++i) {
     roll_fout << yaw_data[i].t << ","
-              << yaw_data[i].enc << ","
-              << roll_data[i].enc << ","
-              << pitch_data[i].enc << ","
+              << yaw_data[i].pwm << ","
+              << roll_data[i].pwm << ","
+              << pitch_data[i].pwm << ","
               << yaw_data[i].ref << ","
               << roll_data[i].ref << ","
               << pitch_data[i].ref << ","
