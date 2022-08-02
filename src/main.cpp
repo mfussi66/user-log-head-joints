@@ -16,18 +16,11 @@
 #include <yarp/os/LogStream.h>
 #include <yarp/os/ResourceFinder.h>
 #include <yarp/os/Time.h>
-#include <yarp/os/Value.h>
-#include <yarp/os/Bottle.h>
 #include <yarp/os/Property.h>
 #include <yarp/dev/PolyDriver.h>
-#include <yarp/dev/IControlMode.h>
-#include <yarp/dev/IControlLimits.h>
-#include <yarp/dev/IPositionControl.h>
-#include <yarp/dev/IPWMControl.h>
-#include <yarp/dev/IPidControl.h>
-#include <yarp/dev/IEncoders.h>
-#include <yarp/dev/PidEnums.h>
+#include <yarp/dev/ControlBoardInterfaces.h>
 
+#include <yarp/os/PeriodicThread.h>
 
 /******************************************************************************/
 struct DataExperiment {
@@ -52,72 +45,68 @@ void signal_callback_handler(int signum) {
    TERMINATED=true;
 }
 
+class ReadThread: public yarp::os::PeriodicThread
+{
 
-/******************************************************************************/
-int main(int argc, char* argv[]) {
-
-   // Register signal and signal handler
-   signal(SIGINT, signal_callback_handler);
-
-  yarp::os::Network yarp;
-  if (!yarp.checkNetwork()) {
-    yError() << "Unable to find YARP server!";
-    return EXIT_FAILURE;
-  }
-
-  yarp::os::ResourceFinder rf;
-  rf.configure(argc, argv);
-
-  auto remote = rf.check("remote", yarp::os::Value("/nwa/wrist_mc")).asString();
-  auto roll_filename  = rf.check("filename", yarp::os::Value("yaw_cmd.log")).asString();  // log roll data
-  // auto pitch_filename = rf.check("file-name-pitch", yarp::os::Value("pitch_output.log")).asString();  // log pitch data
-  auto Ts = rf.check("Ts", yarp::os::Value(0.001)).asFloat64();
-
+private:
   yarp::dev::PolyDriver driver;
   yarp::dev::IEncoders* iEnc{nullptr};
-
   yarp::dev::IPidControl* iPidCtrl{nullptr};
   yarp::dev::IPositionControl* iPosCtrl{nullptr};
-
-  yarp::os::Property conf;
-  conf.put("device", "remote_controlboard");
-  conf.put("remote", remote);
-  conf.put("local", "/logger");
-
-  if (!driver.open(conf)) {
-    yError() << "Failed to connect to" << remote;
-    return EXIT_FAILURE;
-  }
-
-  if (!(driver.view(iEnc))) {
-    yError() << "Failed to open encoder interface";
-    driver.close();
-    return EXIT_FAILURE;
-  }
-
-  if (!(driver.view(iPidCtrl))) {
-    yError() << "Failed to open PID control interface";
-    driver.close();
-    return EXIT_FAILURE;
-  }
-
-  if (!(driver.view(iPosCtrl))) {
-    yError() << "Failed to open position control interface";
-    driver.close();
-    return EXIT_FAILURE;
-  }
-  // Open I/O resources 
   std::ofstream roll_fout, pitch_fout;
-  roll_fout.open(roll_filename.c_str());
-  //pitch_fout.open(pitch_filename.c_str());
+  std::string remote;
+  std::vector<DataExperiment> yaw_data;
+  std::vector<DataExperiment> roll_data;
+  std::vector<DataExperiment> pitch_data;
+  double t0;
 
-  if (!roll_fout.is_open()) {
-    yError() << "Failed to open" << roll_filename;
-    driver.close();
-    return EXIT_FAILURE;
+public: 
+  ReadThread(yarp::conf::float64_t period, std::string remote_port) : PeriodicThread(period){
+
+    remote = remote_port;
   }
 
-  // Write column names
+  bool threadInit() {
+    yInfo() << "ReadThread starting";
+
+
+    yarp::os::Property conf;
+    conf.put("device", "remote_controlboard");
+    conf.put("remote", remote);
+    conf.put("local", "/logger");
+
+    if (!driver.open(conf)) {
+      yError() << "Failed to connect to" << remote;
+      return false;
+    }
+
+    if (!(driver.view(iEnc))) {
+      yError() << "Failed to open encoder interface";
+      driver.close();
+      return false;
+    }
+
+    if (!(driver.view(iPidCtrl))) {
+      yError() << "Failed to open PID control interface";
+      driver.close();
+      return false;
+    }
+
+    if (!(driver.view(iPosCtrl))) {
+      yError() << "Failed to open position control interface";
+      driver.close();
+      return false;
+    }
+
+
+    roll_fout.open("logfile.log");
+
+    if (!roll_fout.is_open()) {
+      yError() << "Failed to open " << "logfile.log";
+      driver.close();
+      return false;
+    }
+
 
   roll_fout << "Time" << ","
         << "Mot1" << ","
@@ -130,20 +119,13 @@ int main(int argc, char* argv[]) {
         << "Mot2_Err" << ","
         << "Mot3_Err" << std::endl;
 
-  // if (!pitch_fout.is_open()) {
-  //   yError() << "Failed to open" << pitch_filename;
-  //   driver.close();
-  //   return EXIT_FAILURE;
-  // }
+    t0 = yarp::os::Time::now();
 
-  std::vector<DataExperiment> yaw_data;
-  std::vector<DataExperiment> roll_data;
-  std::vector<DataExperiment> pitch_data;
-  auto check_conditions{0};
-  auto t0 = yarp::os::Time::now();
-  yInfo() << "Started recording...";
-  // Log data only
-  while(!TERMINATED){
+    return true;
+
+  }
+
+  void run() {
     DataExperiment yaw_d;
     DataExperiment roll_d;
     DataExperiment pitch_d;
@@ -171,66 +153,71 @@ int main(int argc, char* argv[]) {
     iPidCtrl->getPidOutput(yarp::dev::VOCAB_PIDTYPE_POSITION, 1, &roll_d.pwm);
     iPidCtrl->getPidOutput(yarp::dev::VOCAB_PIDTYPE_POSITION, 2, &pitch_d.pwm);
 
-    //yInfo() << "Roll PID ref: " << roll_d.ref << " PID err: " << roll_d.err << "pwm: " << roll_d.pwm  << " enc: " << roll_d.enc;
-    //yInfo() << "Pitch PID ref: " << pitch_d.ref << " PID err: " << pitch_d.err << "pwm: " << pitch_d.pwm << " enc: " << pitch_d.enc;
-    //yInfo() << "Yaw PID ref: " << yaw_d.ref << " PID err: " << yaw_d.err << "pwm: " << yaw_d.pwm << " enc: " << yaw_d.enc;
-
-    // save data
     yaw_data.push_back(std::move(yaw_d));
     roll_data.push_back(std::move(roll_d));
     pitch_data.push_back(std::move(pitch_d));
-
-    yarp::os::Time::delay(Ts);
   }
 
-  if(TERMINATED)
+  void threadRelease() {
+
+    for(uint32_t i = 0; i < roll_data.size(); ++i) {
+      roll_fout << yaw_data[i].t << ","
+                << yaw_data[i].pwm << ","
+                << roll_data[i].pwm << ","
+                << pitch_data[i].pwm << ","
+                << yaw_data[i].ref << ","
+                << roll_data[i].ref << ","
+                << pitch_data[i].ref << ","
+                << yaw_data[i].err << ","
+                << roll_data[i].err << ","
+                << pitch_data[i].err << std::endl;
+    }
+    yInfo() << "Saved data";
+
+    // Close I/O resources 
+    roll_fout.close();
+    // pitch_fout.close();
+    driver.close();
+
+    yInfo() << "Done.";
+  }
+
+};
+
+
+/******************************************************************************/
+int main(int argc, char* argv[]) {
+
+  // Register signal and signal handler
+  signal(SIGINT, signal_callback_handler);
+
+  yarp::os::Network yarp;
+  if (!yarp.checkNetwork()) {
+    yError() << "Unable to find YARP server!";
+    return EXIT_FAILURE;
+  }
+
+  yarp::os::ResourceFinder rf;
+  rf.configure(argc, argv);
+
+  auto remote = rf.check("remote", yarp::os::Value("/nwa/wrist_mc")).asString();
+  auto roll_filename  = rf.check("filename", yarp::os::Value("yaw_cmd.log")).asString();  // log roll data
+  auto period = rf.check("period", yarp::os::Value(0.01)).asFloat64();
+
+  ReadThread read_thread(period, remote);
+
+  yInfo() << "Started recording...";
+  read_thread.start();
+
+  while(!TERMINATED){
+    yInfo() << "Recording data...";
+    yarp::os::Time::delay(5);
+  }
+
+  if(TERMINATED) {
     yInfo() << "Catched SIGINT, saving data to file...";
-    
-
-  for(uint32_t i = 0; i < roll_data.size(); ++i) {
-    roll_fout << yaw_data[i].t << ","
-              << yaw_data[i].pwm << ","
-              << roll_data[i].pwm << ","
-              << pitch_data[i].pwm << ","
-              << yaw_data[i].ref << ","
-              << roll_data[i].ref << ","
-              << pitch_data[i].ref << ","
-              << yaw_data[i].err << ","
-              << roll_data[i].err << ","
-              << pitch_data[i].err << std::endl;
+    read_thread.stop(); 
   }
-    
-  // write down roll data
-  // for (const auto & d : roll_data) {
-  //   roll_fout << d.t << ","
-  //       << d.pid_out << ","
-  //       << d.pwm << ","
-  //       << d.enc << ","
-  //       << d.ref << ","
-  //       << d.err << std::endl;
-  // }
-  
-  yInfo() << "Saved roll data";
-
-  // write down pitch data
-  // for (const auto & d : pitch_data) {
-  //     pitch_fout << d.t << ","
-  //       << d.pid_out << ","
-  //       << d.pwm << ","
-  //       << d.enc << ","
-  //       << d.ref << ","
-  //       << d.err << std::endl;
-  // }
-
-  // yInfo() << "Saved pitch data";
-
-  // Close I/O resources 
-  roll_fout.close();
-  // pitch_fout.close();
-  driver.close();
-
-  yInfo() << "Done.";
-
 
   return EXIT_SUCCESS;
 }
