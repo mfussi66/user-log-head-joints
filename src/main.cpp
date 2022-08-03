@@ -5,24 +5,23 @@
  *                                                                            *
  ******************************************************************************/
 
-#include <cstdlib>
-#include <string>
-#include <vector>
-#include <fstream>
-#include <iostream>
-#include <signal.h>
-
-#include <yarp/os/Network.h>
+#include <yarp/dev/ControlBoardInterfaces.h>
+#include <yarp/dev/PolyDriver.h>
 #include <yarp/os/LogStream.h>
+#include <yarp/os/Network.h>
+#include <yarp/os/PeriodicThread.h>
+#include <yarp/os/Property.h>
 #include <yarp/os/ResourceFinder.h>
 #include <yarp/os/Time.h>
-#include <yarp/os/Property.h>
-#include <yarp/dev/PolyDriver.h>
-#include <yarp/dev/ControlBoardInterfaces.h>
 
-#include <yarp/os/PeriodicThread.h>
+#include <cstdlib>
+#include <fstream>
+#include <iostream>
+#include <string>
+#include <vector>
+#include <signal.h>
 
-/******************************************************************************/
+ /******************************************************************************/
 struct DataExperiment {
   double t;
   double pwm;
@@ -41,18 +40,16 @@ bool TERMINATED = false;
 /******************************************************************************/
 // The function to be called when ctrl-c (SIGINT) is sent to process
 void signal_callback_handler(int signum) {
-   // Terminate program
-   TERMINATED=true;
+  // Terminate program
+  TERMINATED = true;
 }
 
-class ReadThread: public yarp::os::PeriodicThread
-{
-
+class ReadThread : public yarp::os::PeriodicThread {
 private:
   yarp::dev::PolyDriver driver;
-  yarp::dev::IEncoders* iEnc{nullptr};
-  yarp::dev::IPidControl* iPidCtrl{nullptr};
-  yarp::dev::IPositionControl* iPosCtrl{nullptr};
+  yarp::dev::IEncoders* iEnc{ nullptr };
+  yarp::dev::IPidControl* iPidCtrl{ nullptr };
+  yarp::dev::IPositionControl* iPosCtrl{ nullptr };
   std::ofstream roll_fout, pitch_fout;
   std::string remote;
   std::vector<DataExperiment> yaw_data;
@@ -60,15 +57,14 @@ private:
   std::vector<DataExperiment> pitch_data;
   double t0;
 
-public: 
-  ReadThread(yarp::conf::float64_t period, std::string remote_port) : PeriodicThread(period){
-
+public:
+  ReadThread(yarp::conf::float64_t period, std::string remote_port)
+    : PeriodicThread(period) {
     remote = remote_port;
   }
 
   bool threadInit() {
     yInfo() << "ReadThread starting";
-
 
     yarp::os::Property conf;
     conf.put("device", "remote_controlboard");
@@ -98,38 +94,29 @@ public:
       return false;
     }
 
-
     roll_fout.open("logfile.log");
 
     if (!roll_fout.is_open()) {
-      yError() << "Failed to open " << "logfile.log";
+      yError() << "Failed to open "
+        << "logfile.log";
       driver.close();
       return false;
     }
 
-
-  roll_fout << "Time" << ","
-        << "Mot1" << ","
-        << "Mot2" << ","
-        << "Mot3" << ","
-        << "Mot1_Ref" << ","
-        << "Mot2_Ref" << ","
-        << "Mot3_Ref" << ","
-        << "Mot1_Err" << ","
-        << "Mot2_Err" << ","
-        << "Mot3_Err" << std::endl;
+    roll_fout << "Time"<< ","<< "Mot1"<< ","<< "Mot2"<< ","<< "Mot3"<< ","
+      << "Mot1_Ref"<< ","<< "Mot2_Ref"<< ","<< "Mot3_Ref"<< ","
+      << "Mot1_Err"<< ","<< "Mot2_Err"<< ","<< "Mot3_Err" << std::endl;
 
     t0 = yarp::os::Time::now();
 
     return true;
-
   }
 
   void run() {
     DataExperiment yaw_d;
     DataExperiment roll_d;
     DataExperiment pitch_d;
-    auto delta_t = yarp::os::Time::now() - t0; 
+    auto delta_t = yarp::os::Time::now() - t0;
     roll_d.t = pitch_d.t = delta_t;
     yaw_d.t = delta_t;
 
@@ -137,13 +124,19 @@ public:
     iEnc->getEncoder(1, &roll_d.enc);
     iEnc->getEncoder(2, &pitch_d.enc);
 
-    iPidCtrl->getPidReference(yarp::dev::VOCAB_PIDTYPE_POSITION, 0, &yaw_d.ref);
-    iPidCtrl->getPidReference(yarp::dev::VOCAB_PIDTYPE_POSITION, 1, &roll_d.ref);
-    iPidCtrl->getPidReference(yarp::dev::VOCAB_PIDTYPE_POSITION, 2, &pitch_d.ref);
+    iPidCtrl->getPidReference(yarp::dev::VOCAB_PIDTYPE_POSITION, 0,
+      &yaw_d.ref);
+    iPidCtrl->getPidReference(yarp::dev::VOCAB_PIDTYPE_POSITION, 1,
+      &roll_d.ref);
+    iPidCtrl->getPidReference(yarp::dev::VOCAB_PIDTYPE_POSITION, 2,
+      &pitch_d.ref);
 
-    if(!iPosCtrl->getTargetPosition(0, &yaw_d.target)) yWarning() << "Cannot retrieve yaw tg";
-    if(!iPosCtrl->getTargetPosition(1, &roll_d.target))  yWarning() << "Cannot retrieve roll tg";
-    if(!iPosCtrl->getTargetPosition(2, &pitch_d.target))  yWarning() << "Cannot retrieve pitch tg";
+    if (!iPosCtrl->getTargetPosition(0, &yaw_d.target))
+      yWarning() << "Cannot retrieve yaw tg";
+    if (!iPosCtrl->getTargetPosition(1, &roll_d.target))
+      yWarning() << "Cannot retrieve roll tg";
+    if (!iPosCtrl->getTargetPosition(2, &pitch_d.target))
+      yWarning() << "Cannot retrieve pitch tg";
 
     iPidCtrl->getPidError(yarp::dev::VOCAB_PIDTYPE_POSITION, 0, &yaw_d.err);
     iPidCtrl->getPidError(yarp::dev::VOCAB_PIDTYPE_POSITION, 1, &roll_d.err);
@@ -159,35 +152,26 @@ public:
   }
 
   void threadRelease() {
-
-    for(uint32_t i = 0; i < roll_data.size(); ++i) {
-      roll_fout << yaw_data[i].t << ","
-                << yaw_data[i].pwm << ","
-                << roll_data[i].pwm << ","
-                << pitch_data[i].pwm << ","
-                << yaw_data[i].ref << ","
-                << roll_data[i].ref << ","
-                << pitch_data[i].ref << ","
-                << yaw_data[i].err << ","
-                << roll_data[i].err << ","
-                << pitch_data[i].err << std::endl;
+    for (uint32_t i = 0; i < roll_data.size(); ++i) {
+      roll_fout << yaw_data[i].t << "," << yaw_data[i].pwm << ","
+        << roll_data[i].pwm << "," << pitch_data[i].pwm << ","
+        << yaw_data[i].ref << "," << roll_data[i].ref << ","
+        << pitch_data[i].ref << "," << yaw_data[i].err << ","
+        << roll_data[i].err << "," << pitch_data[i].err << std::endl;
     }
     yInfo() << "Saved data";
 
-    // Close I/O resources 
+    // Close I/O resources
     roll_fout.close();
     // pitch_fout.close();
     driver.close();
 
     yInfo() << "Done.";
   }
-
 };
-
 
 /******************************************************************************/
 int main(int argc, char* argv[]) {
-
   // Register signal and signal handler
   signal(SIGINT, signal_callback_handler);
 
@@ -201,7 +185,8 @@ int main(int argc, char* argv[]) {
   rf.configure(argc, argv);
 
   auto remote = rf.check("remote", yarp::os::Value("/nwa/wrist_mc")).asString();
-  auto roll_filename  = rf.check("filename", yarp::os::Value("yaw_cmd.log")).asString();  // log roll data
+  auto roll_filename = rf.check("filename", yarp::os::Value("yaw_cmd.log"))
+    .asString();  // log roll data
   auto period = rf.check("period", yarp::os::Value(0.01)).asFloat64();
 
   ReadThread read_thread(period, remote);
@@ -209,14 +194,14 @@ int main(int argc, char* argv[]) {
   yInfo() << "Started recording...";
   read_thread.start();
 
-  while(!TERMINATED){
+  while (!TERMINATED) {
     yInfo() << "Recording data...";
     yarp::os::Time::delay(5);
   }
 
-  if(TERMINATED) {
+  if (TERMINATED) {
     yInfo() << "Catched SIGINT, saving data to file...";
-    read_thread.stop(); 
+    read_thread.stop();
   }
 
   return EXIT_SUCCESS;
