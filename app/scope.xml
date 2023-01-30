@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<portscope rows="2" columns="2" carrier="fast_tcp" no-persistent="1">
+    <plot gridx="0"
+          gridy="0"
+          title="Yaw"
+          size="60"
+          minval="-50"
+          maxval="50"
+          bgcolor="white">
+        <graph remote="/ergocub/head/state:o"
+               index="2"
+               color="Black"
+               title="Yaw" />
+    <plot gridx="1"
+          gridy="0"
+          title="Pitch"
+          size="60"
+          minval="-50"
+          maxval="30"
+          bgcolor="white">
+        <graph remote="/ergocub/head/state:o"
+               index="0"
+               color="Black"
+               title="Pitch" />
+    </plot>
+    <plot gridx="0"
+          gridy="1"
+          title="Roll"
+          size="60"
+          minval="-25"
+          maxval="25"
+          bgcolor="white">
+        <graph remote="/ergocub/head/state:o"
+               index="1"
+               color="Black"
+               title="Roll" />
+    </plot>
+    <plot gridx="1"
+          gridy="1"
+          title="Cam tilt"
+          size="60"
+          minval="-35"
+          maxval="35"
+          bgcolor="white">
+        <graph remote="/ergocub/head/state:o"
+               index="3"
+               color="Black"
+               title="Cam tilt" />
+    </plot>
+
+
+</portscope>
