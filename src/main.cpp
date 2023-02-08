@@ -14,6 +14,7 @@
 #include <yarp/os/ResourceFinder.h>
 #include <yarp/os/RFModule.h>
 #include <yarp/os/Time.h>
+#include <yarp/sig/Vector.h>
 
 #include <cstdlib>
 #include <fstream>
@@ -22,47 +23,41 @@
 #include <vector>
 #include <signal.h>
 
- /******************************************************************************/
-struct DataExperiment {
-  double pwm;
-  double pid_out;
-  double enc;
-  double ref;
-  double err;
-  double target;
-  double taskspace_enc;
-};
 
-constexpr int PITCH_JOINT_ID = 0;
-constexpr int ROLL_JOINT_ID = 1;
-constexpr int YAW_JOINT_ID = 2;
-constexpr int CAM_JOINT_ID = 3;
+using namespace yarp::sig;
+
+ /******************************************************************************/
 
 class ReadThread : public yarp::os::RFModule {
+
 private:
   yarp::dev::PolyDriver driver;
-  yarp::dev::IEncoders* iEnc{ nullptr };
-  yarp::dev::IPidControl* iPidCtrl{ nullptr };
-  yarp::dev::IPositionControl* iPosCtrl{ nullptr };
-  std::ofstream fout, pitch_fout;
-  std::string remote;
-  std::string fname;
-  std::vector<DataExperiment> yaw_data;
-  std::vector<DataExperiment> roll_data;
-  std::vector<DataExperiment> pitch_data;
-  std::vector<DataExperiment> cam_data;
+  yarp::dev::IEncoders * iEnc{ nullptr };
+  yarp::dev::IPidControl * iPidCtrl{ nullptr };
+  yarp::dev::IPositionControl * iPosCtrl{ nullptr };
+  yarp::dev::IMotorEncoders * iMEnc {nullptr};
+
+  std::vector<std::vector<double>> joint_encoders;
+  std::vector<std::vector<double>> motor_encoders;
+  std::vector<std::vector<double>> pids_out;
+  std::vector<std::vector<double>> pids_reference;
+  std::vector<std::vector<double>> pids_error;
+
   std::vector<double> time_vector;
+
+  std::ofstream fout;
+
   double period;
   double t0;
+  int n_axes;
 
 public:
 
   bool configure(yarp::os::ResourceFinder &rf) {
-    yInfo() << "ReadThread starting";
 
     auto remote = rf.check("remote", yarp::os::Value("/ergocub/head")).asString();
-    auto roll_filename = rf.check("file", yarp::os::Value("ecub_head.csv")).asString();  // log roll data
-    period = rf.check("period", yarp::os::Value(0.03)).asFloat64();
+    auto filename = rf.check("file", yarp::os::Value("ecub_head.csv")).asString();  // log roll data
+    period = rf.check("period", yarp::os::Value(0.1)).asFloat64();
 
     yarp::os::Property conf;
     conf.put("device", "remote_controlboard");
@@ -80,6 +75,14 @@ public:
       return false;
     }
 
+    if (iEnc->getAxes(&n_axes)) {
+      joint_encoders.resize(1, std::vector<double>(n_axes));
+    } else {
+      yError() << "Could not get the number of joint_encoders!";
+      return false;
+    }
+
+
     if (!(driver.view(iPidCtrl))) {
       yError() << "Failed to open PID control interface";
       driver.close();
@@ -92,19 +95,36 @@ public:
       return false;
     }
 
-    fout.open(roll_filename);
+    if (!(driver.view(iMEnc))) {
+      yError() << "Failed to open motor encoder interface";
+      driver.close();
+      return false;
+    }
+
+    if (iPosCtrl->getAxes(&n_axes)) {
+      motor_encoders.resize(1, std::vector<double>(n_axes));
+      pids_reference.resize(1, std::vector<double>(n_axes));
+      pids_error.resize(1, std::vector<double>(n_axes));
+      pids_out.resize(1, std::vector<double>(n_axes));
+    } else {
+      yError() << "Could not get the number of joint_encoders!";
+      return false;
+    }
+
+    fout.open(filename);
 
     if (!fout.is_open()) {
-      yError() << "Failed to open " << roll_filename;
+      yError() << "Failed to open " << filename;
       driver.close();
       return false;
     }
 
     fout << "Time"<< ","
+      << "Roll, Pitch, Yaw, Cam,"
+      << "Mot0_Enc"<< ","<< "Mot1_Enc"<< ","<< "Mot2_Enc" << ","<< "Mot3_Enc" << ","
       << "Mot0_Pwm"<< ","<< "Mot1_Pwm"<< ","<< "Mot2_Pwm" << ","<< "Mot3_Pwm" << ","
       << "Mot0_Ref"<< ","<< "Mot1_Ref"<< ","<< "Mot2_Ref" << ","<< "Mot3_Ref" << ","
-      << "Mot0_Err"<< ","<< "Mot1_Err"<< ","<< "Mot2_Err" << ","<< "Mot3_Err" << ","
-      << "Roll,Pitch,Yaw,Cam" << std::endl;
+      << "Mot0_Err"<< ","<< "Mot1_Err"<< ","<< "Mot2_Err" << ","<< "Mot3_Err" << std::endl;
     t0 = yarp::os::Time::now();
 
     yInfo() << "Started recording...";
@@ -117,71 +137,64 @@ public:
   }
 
   bool updateModule() {
-    DataExperiment yaw_d;
-    DataExperiment roll_d;
-    DataExperiment pitch_d;
-    DataExperiment cam_d;
+
     time_vector.push_back(static_cast<double>(yarp::os::Time::now() - t0));
 
-    iEnc->getEncoder(YAW_JOINT_ID, &yaw_d.taskspace_enc);
-    iEnc->getEncoder(ROLL_JOINT_ID, &roll_d.taskspace_enc);
-    iEnc->getEncoder(PITCH_JOINT_ID, &pitch_d.taskspace_enc);
-    iEnc->getEncoder(CAM_JOINT_ID, &cam_d.taskspace_enc);
+    std::vector<double> line;
+    line.resize(n_axes);
 
-    iPidCtrl->getPidReference(yarp::dev::VOCAB_PIDTYPE_POSITION, YAW_JOINT_ID,
-      &yaw_d.ref);
-    iPidCtrl->getPidReference(yarp::dev::VOCAB_PIDTYPE_POSITION, ROLL_JOINT_ID,
-      &roll_d.ref);
-    iPidCtrl->getPidReference(yarp::dev::VOCAB_PIDTYPE_POSITION, PITCH_JOINT_ID,
-      &pitch_d.ref);
-    iPidCtrl->getPidReference(yarp::dev::VOCAB_PIDTYPE_POSITION, CAM_JOINT_ID,
-      &cam_d.ref);
+    iEnc->getEncoders(line.data());
+    joint_encoders.push_back(line);
 
-    if (!iPosCtrl->getTargetPosition(YAW_JOINT_ID, &yaw_d.target))
-      yWarning() << "Cannot retrieve yaw tg";
-    if (!iPosCtrl->getTargetPosition(ROLL_JOINT_ID, &roll_d.target))
-      yWarning() << "Cannot retrieve roll tg";
-    if (!iPosCtrl->getTargetPosition(PITCH_JOINT_ID, &pitch_d.target))
-      yWarning() << "Cannot retrieve pitch tg";
-    if (!iPosCtrl->getTargetPosition(CAM_JOINT_ID, &cam_d.target))
-      yWarning() << "Cannot retrieve cam tg";
+    iMEnc->getMotorEncoders(line.data());
+    motor_encoders.push_back(line);
 
-    iPidCtrl->getPidError(yarp::dev::VOCAB_PIDTYPE_POSITION, YAW_JOINT_ID, &yaw_d.err);
-    iPidCtrl->getPidError(yarp::dev::VOCAB_PIDTYPE_POSITION, ROLL_JOINT_ID, &roll_d.err);
-    iPidCtrl->getPidError(yarp::dev::VOCAB_PIDTYPE_POSITION, PITCH_JOINT_ID, &pitch_d.err);
-    iPidCtrl->getPidError(yarp::dev::VOCAB_PIDTYPE_POSITION, CAM_JOINT_ID, &cam_d.err);
+    iPidCtrl->getPidReferences(yarp::dev::VOCAB_PIDTYPE_POSITION, line.data());
+    pids_reference.push_back(line);
 
-    iPidCtrl->getPidOutput(yarp::dev::VOCAB_PIDTYPE_POSITION, YAW_JOINT_ID, &yaw_d.pwm);
-    iPidCtrl->getPidOutput(yarp::dev::VOCAB_PIDTYPE_POSITION, ROLL_JOINT_ID, &roll_d.pwm);
-    iPidCtrl->getPidOutput(yarp::dev::VOCAB_PIDTYPE_POSITION, PITCH_JOINT_ID, &pitch_d.pwm);
+    iPidCtrl->getPidErrors(yarp::dev::VOCAB_PIDTYPE_POSITION, line.data());
+    pids_error.push_back(line);
 
-    yaw_data.push_back(std::move(yaw_d));
-    roll_data.push_back(std::move(roll_d));
-    pitch_data.push_back(std::move(pitch_d));
-    cam_data.push_back(std::move(cam_d));
+    iPidCtrl->getPidOutputs(yarp::dev::VOCAB_PIDTYPE_POSITION, line.data());
+    pids_out.push_back(line);
 
     yInfoThrottle(10) << "Recording data...";
 
     return true;
   }
 
+  std::stringstream writeLine(uint32_t i) {
+
+    std::stringstream line;
+
+    line << time_vector[i];
+
+    for(auto & e : joint_encoders[i])
+      line << "," << e;
+    for(auto & e : motor_encoders[i])
+      line << "," << e;
+    for(auto & e : pids_reference[i])
+      line << "," << e;
+    for(auto & e : pids_error[i])
+      line << "," << e;
+    for(auto & e : pids_out[i])
+      line << "," << e;
+
+    line << std::endl;
+
+    return line;
+  }
+
   bool close() {
 
     yInfo() << "Catched SIGINT, saving data to file...";
 
-
-    for (size_t i = 0; i < roll_data.size(); ++i) {
-      fout << time_vector[i] << ","
-        << yaw_data[i].pwm << "," << roll_data[i].pwm << "," << pitch_data[i].pwm << "," << cam_data[i].pwm << ","
-        << yaw_data[i].ref << "," << roll_data[i].ref << "," << pitch_data[i].ref << "," << cam_data[i].ref << "," 
-        << yaw_data[i].err << "," << roll_data[i].err << "," << pitch_data[i].err << "," << cam_data[i].err << "," 
-        << roll_data[i].taskspace_enc << "," << pitch_data[i].taskspace_enc << ","  << yaw_data[i].taskspace_enc << "," << cam_data[i].taskspace_enc 
-        << std::endl;
+    for(uint32_t i = 0; i < time_vector.size(); ++i) {
+      fout << writeLine(i).str();
     }
 
     // Close I/O resources
     fout.close();
-    // pitch_fout.close();
     driver.close();
 
     yInfo() << "Done.";
@@ -190,7 +203,7 @@ public:
   }
 };
 
-/****************************************************************q`**************/
+/******************************************************************************/
 int main(int argc, char* argv[]) {
 
   yarp::os::Network yarp;
