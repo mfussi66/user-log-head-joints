@@ -21,21 +21,30 @@
 #include <iostream>
 #include <string>
 #include <vector>
+#include <iterator>
 #include <memory>
 
 
-using namespace yarp::sig;
+using namespace yarp::dev;
+
+std::array<std::string, 5> available_interfaces = {
+  "joint_encoder",
+  "motor_encoder",
+  "pid_reference",
+  "pid_error",
+  "pid_out" };
 
 /******************************************************************************/
 
 class Reader : public yarp::os::PeriodicThread {
   private:
 
-    yarp::dev::PolyDriver driver;
-    yarp::dev::IEncoders * iEnc{ nullptr };
-    yarp::dev::IPidControl * iPidCtrl{ nullptr };
-    yarp::dev::IPositionControl * iPosCtrl{ nullptr };
-    yarp::dev::IMotorEncoders * iMEnc {nullptr};
+    PolyDriver driver;
+    IEncoders * iEnc{ nullptr };
+    IPidControl * iPidCtrl{ nullptr };
+    IPositionControl * iPosCtrl{ nullptr };
+    IMotorEncoders * iMEnc {nullptr};
+    std::vector<std::string> interfaces_;
     yarp::os::Property conf_;
     double thread_period;
     int n_axes_;
@@ -47,14 +56,24 @@ class Reader : public yarp::os::PeriodicThread {
     std::vector<std::vector<double>> pids_out;
     std::vector<std::vector<double>> pids_reference;
     std::vector<std::vector<double>> pids_error;
+    std::vector<double> line_;
     std::ofstream fout;
+    std::vector<int> axes_to_log_;
+    double value_;
 
   public:
 
-    Reader(double period, const yarp::os::Property & conf, const std::string & filename) : yarp::os::PeriodicThread(period) {
+    Reader(double period, const yarp::os::Property & conf, 
+            const std::string & filename, 
+            const std::vector<std::string> & interfaces, const int n_axes, const std::vector<int>& axes_to_log)
+    : yarp::os::PeriodicThread(period) {
+        n_axes_ = n_axes;
         thread_period = period;
         conf_ = conf;
         filename_ = filename;
+        interfaces_ = interfaces;
+        axes_to_log_.resize(n_axes_);
+        axes_to_log_ = axes_to_log;
     }
 
     bool threadInit() {
@@ -72,6 +91,7 @@ class Reader : public yarp::os::PeriodicThread {
 
       if (iEnc->getAxes(&n_axes_)) {
         joint_encoders.resize(1, std::vector<double>(n_axes_));
+        line_.resize(n_axes_);
       } else {
         yError() << "Could not get the number of joint_encoders!";
         return false;
@@ -114,16 +134,15 @@ class Reader : public yarp::os::PeriodicThread {
 
 
     fout << "Time"<< ","
-      << "Roll, Pitch, Yaw, Cam,"
-      << "Mot0_Enc"<< ","<< "Mot1_Enc"<< ","<< "Mot2_Enc" << ","<< "Mot3_Enc" << ","
-      << "Mot0_Pwm"<< ","<< "Mot1_Pwm"<< ","<< "Mot2_Pwm" << ","<< "Mot3_Pwm" << ","
-      << "Mot0_Ref"<< ","<< "Mot1_Ref"<< ","<< "Mot2_Ref" << ","<< "Mot3_Ref" << ","
-      << "Mot0_Err"<< ","<< "Mot1_Err"<< ","<< "Mot2_Err" << ","<< "Mot3_Err" << std::endl;
+      << "Roll,Pitch,Yaw" << ","
+      << "Mot0_Enc"<< ","<< "Mot1_Enc"<< ","<< "Mot2_Enc" << ","<< ","
+      << "Mot0_Pwm"<< ","<< "Mot1_Pwm"<< ","<< "Mot2_Pwm" << ","<< ","
+      << "Mot0_Ref"<< ","<< "Mot1_Ref"<< ","<< "Mot2_Ref" << ","<< ","
+      << "Mot0_Err"<< ","<< "Mot1_Err"<< ","<< "Mot2_Err" << ","<< std::endl;
     t0 = yarp::os::Time::now();
 
       return true;
     }
-
 
     std::stringstream constructLine(uint32_t i) {
 
@@ -131,16 +150,24 @@ class Reader : public yarp::os::PeriodicThread {
 
       line << time_vector[i];
 
-      for(auto & e : joint_encoders[i])
-        line << "," << e;
-      for(auto & e : motor_encoders[i])
-        line << "," << e;
-      for(auto & e : pids_reference[i])
-        line << "," << e;
-      for(auto & e : pids_error[i])
-        line << "," << e;
-      for(auto & e : pids_out[i])
-        line << "," << e;
+      if (joint_encoders.size() == time_vector.size()) {
+        for(auto & e : joint_encoders[i]) line << "," << e;
+      }
+      if (motor_encoders.size() == time_vector.size()) {
+        for(auto & e : motor_encoders[i]) line << "," << e;
+      }
+
+      if (pids_reference.size() == time_vector.size()) {
+        for(auto & e : pids_reference[i]) line << "," << e;
+      }
+
+      if (pids_error.size() == time_vector.size()) {
+        for(auto & e : pids_error[i]) line << "," << e;
+      }
+
+      if (pids_out.size() == time_vector.size()) {
+        for(auto & e : pids_out[i]) line << "," << e;
+      }
 
       line << std::endl;
 
@@ -153,39 +180,47 @@ class Reader : public yarp::os::PeriodicThread {
         fout << constructLine(i).str();
       }
 
+      fout.close();
+      driver.close();
       yInfo() << "Done.";
 
       // Close I/O resources
-
-      fout.close();
-      driver.close();
     }
 
     void run() {
-
       time_vector.push_back(static_cast<double>(yarp::os::Time::now() - t0));
 
-      std::vector<double> line;
-      line.resize(n_axes_);
 
-      iEnc->getEncoders(line.data());
-      joint_encoders.push_back(line);
+      for (auto & i : axes_to_log_) {
+        iEnc->getEncoder(i, &value_);
+        line_.push_back(value_);
+      }
+      joint_encoders.push_back(line_);
 
-      iMEnc->getMotorEncoders(line.data());
-      motor_encoders.push_back(line);
+      for (auto & i : axes_to_log_) {
+        iMEnc->getMotorEncoder(i, &value_);
+        line_.push_back(value_);
+      }
+      motor_encoders.push_back(line_);
 
-      iPidCtrl->getPidReferences(yarp::dev::VOCAB_PIDTYPE_POSITION, line.data());
-      pids_reference.push_back(line);
+      for (auto & i : axes_to_log_) {
+        iPidCtrl->getPidReference(VOCAB_PIDTYPE_POSITION, i, &value_);
+        line_.push_back(value_);
+      }
+      pids_reference.push_back(line_);
 
-      iPidCtrl->getPidErrors(yarp::dev::VOCAB_PIDTYPE_POSITION, line.data());
-      pids_error.push_back(line);
+      for (auto & i : axes_to_log_) {
+        iPidCtrl->getPidError(VOCAB_PIDTYPE_POSITION, i, &value_);
+        line_.push_back(value_);
+      }
+      pids_error.push_back(line_);
 
-      iPidCtrl->getPidOutputs(yarp::dev::VOCAB_PIDTYPE_POSITION, line.data());
-      pids_out.push_back(line);
-
-      yDebug() << "test";
+      for (auto & i : axes_to_log_) {
+        iPidCtrl->getPidOutput(VOCAB_PIDTYPE_POSITION, i, &value_);
+        line_.push_back(value_);
+      }
+      pids_out.push_back(line_);
     }
-
 };
 
 class Module : public yarp::os::RFModule {
@@ -201,13 +236,37 @@ public:
     auto remote = rf.check("remote", yarp::os::Value("/ergocubSim/head")).asString();
     auto filename = rf.check("file", yarp::os::Value("ecub_head.csv")).asString();  // log roll data
     double period = rf.check("period", yarp::os::Value(0.1)).asFloat64();
+    int n_axes = 0;
+    std::vector<std::string> s;
+
+    if(rf.check("interfaces")) {
+      yarp::os::Bottle * b = rf.find("interfaces").asList();
+
+      for(uint8_t i; i < b->size(); ++i)
+          s.push_back(b->get(i).asString());
+    }
+
+    std::vector<int> ax;
+    if(rf.check("axes_to_log")) {
+      yarp::os::Bottle * b = rf.find("axes_to_log").asList();
+
+      n_axes = b->size();
+
+      for(uint8_t i; i < b->size(); ++i)
+          ax.push_back(b->get(i).asInt32());
+    }
+    else 
+    {
+      yError() << "axes to log not found";
+      return false;
+    }
 
     yarp::os::Property conf;
     conf.put("device", "remote_controlboard");
     conf.put("remote", remote);
     conf.put("local", "/logger");
 
-    reader = std::make_unique<Reader>(period, conf, filename);
+    reader = std::make_unique<Reader>(period, conf, filename, s, n_axes, ax);
 
     if(!reader->start())
       return false;
@@ -221,7 +280,7 @@ public:
 
     if(!reader->isRunning()) return false;
 
-    yInfoThrottle(10) << "Recording data...";
+    yInfoThrottle(5) << "Recording data...";
 
     return true;
   }
