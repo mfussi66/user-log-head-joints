@@ -245,6 +245,11 @@ public:
       for(uint8_t i; i < b->size(); ++i)
           s.push_back(b->get(i).asString());
     }
+    else 
+    {
+      yError() << "interfaces not found";
+      return false;
+    }
 
     std::vector<int> ax;
     if(rf.check("axes_to_log")) {
