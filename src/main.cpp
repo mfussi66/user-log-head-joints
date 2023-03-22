@@ -89,9 +89,10 @@ class Reader : public yarp::os::PeriodicThread {
         return false;
       }
 
-      if (iEnc->getAxes(&n_axes_)) {
+      if(true){
         joint_encoders.resize(1, std::vector<double>(n_axes_));
         line_.resize(n_axes_);
+        yInfo() << "naxes" << n_axes_;
       } else {
         yError() << "Could not get the number of joint_encoders!";
         return false;
@@ -115,7 +116,7 @@ class Reader : public yarp::os::PeriodicThread {
         return false;
       }
 
-      if (iPosCtrl->getAxes(&n_axes_)) {
+      if (true) {
         motor_encoders.resize(1, std::vector<double>(n_axes_));
         pids_reference.resize(1, std::vector<double>(n_axes_));
         pids_error.resize(1, std::vector<double>(n_axes_));
@@ -134,11 +135,11 @@ class Reader : public yarp::os::PeriodicThread {
 
 
     fout << "Time"<< ","
-      << "Roll,Pitch,Yaw" << ","
-      << "Mot0_Enc"<< ","<< "Mot1_Enc"<< ","<< "Mot2_Enc" << ","<< ","
-      << "Mot0_Pwm"<< ","<< "Mot1_Pwm"<< ","<< "Mot2_Pwm" << ","<< ","
-      << "Mot0_Ref"<< ","<< "Mot1_Ref"<< ","<< "Mot2_Ref" << ","<< ","
-      << "Mot0_Err"<< ","<< "Mot1_Err"<< ","<< "Mot2_Err" << ","<< std::endl;
+      << "Yaw,Roll,Pitch" << ","
+      << "Mot0_Enc"<< ","<< "Mot1_Enc"<< ","<< "Mot2_Enc" << ","
+      << "Aea0_Ref"<< ","<< "Aea1_Ref"<< ","<< "Aea2_Ref" << ","
+      << "Aea0_Err"<< ","<< "Aea1_Err"<< ","<< "Aea2_Err" << ","
+      << "Pid0_Out"<< ","<< "Pid1_Out"<< ","<< "Pid2_Out" <<  std::endl;
     t0 = yarp::os::Time::now();
 
       return true;
@@ -150,24 +151,17 @@ class Reader : public yarp::os::PeriodicThread {
 
       line << time_vector[i];
 
-      if (joint_encoders.size() == time_vector.size()) {
-        for(auto & e : joint_encoders[i]) line << "," << e;
-      }
-      if (motor_encoders.size() == time_vector.size()) {
+        for(auto & e : joint_encoders[i])
+          {
+          line << "," << e;
+          }
         for(auto & e : motor_encoders[i]) line << "," << e;
-      }
 
-      if (pids_reference.size() == time_vector.size()) {
         for(auto & e : pids_reference[i]) line << "," << e;
-      }
 
-      if (pids_error.size() == time_vector.size()) {
         for(auto & e : pids_error[i]) line << "," << e;
-      }
 
-      if (pids_out.size() == time_vector.size()) {
         for(auto & e : pids_out[i]) line << "," << e;
-      }
 
       line << std::endl;
 
@@ -193,31 +187,31 @@ class Reader : public yarp::os::PeriodicThread {
 
       for (auto & i : axes_to_log_) {
         iEnc->getEncoder(i, &value_);
-        line_.push_back(value_);
+        line_[i] = value_;
       }
       joint_encoders.push_back(line_);
 
       for (auto & i : axes_to_log_) {
         iMEnc->getMotorEncoder(i, &value_);
-        line_.push_back(value_);
+        line_[i] = value_;
       }
       motor_encoders.push_back(line_);
 
       for (auto & i : axes_to_log_) {
         iPidCtrl->getPidReference(VOCAB_PIDTYPE_POSITION, i, &value_);
-        line_.push_back(value_);
+        line_[i] = value_;
       }
       pids_reference.push_back(line_);
 
       for (auto & i : axes_to_log_) {
         iPidCtrl->getPidError(VOCAB_PIDTYPE_POSITION, i, &value_);
-        line_.push_back(value_);
+        line_[i] = value_;
       }
       pids_error.push_back(line_);
 
       for (auto & i : axes_to_log_) {
         iPidCtrl->getPidOutput(VOCAB_PIDTYPE_POSITION, i, &value_);
-        line_.push_back(value_);
+        line_[i] = value_;
       }
       pids_out.push_back(line_);
     }
@@ -256,7 +250,7 @@ public:
       yarp::os::Bottle * b = rf.find("axes_to_log").asList();
 
       n_axes = b->size();
-
+      yInfo() << "axes " << n_axes;
       for(uint8_t i; i < b->size(); ++i)
           ax.push_back(b->get(i).asInt32());
     }
