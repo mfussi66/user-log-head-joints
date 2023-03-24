@@ -135,7 +135,7 @@ class Reader : public yarp::os::PeriodicThread {
 
 
     fout << "Time"<< ","
-      << "Yaw,Roll,Pitch" << ","
+      << "Roll,Pitch,Yaw" << ","
       << "Mot0_Enc"<< ","<< "Mot1_Enc"<< ","<< "Mot2_Enc" << ","
       << "Aea0_Ref"<< ","<< "Aea1_Ref"<< ","<< "Aea2_Ref" << ","
       << "Aea0_Err"<< ","<< "Aea1_Err"<< ","<< "Aea2_Err" << ","
