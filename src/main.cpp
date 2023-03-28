@@ -7,8 +7,6 @@
 
 #include "Reader.h"
 
-using namespace yarp::os;
-
 class Module : public RFModule {
 
 private:
@@ -20,6 +18,7 @@ public:
   bool configure(ResourceFinder &rf) {
 
     auto remote = rf.check("remote", Value("/icub/head")).asString();
+    auto port_name = rf.check("out_port", Value("/cblogger")).asString();
     auto filename = rf.check("file", Value("file.csv")).asString();  // log roll data
     double period = rf.check("period", Value(0.1)).asFloat64();
     int n_axes = 0;
@@ -74,7 +73,7 @@ public:
     conf.put("remote", remote);
     conf.put("local", "/logger");
 
-    reader = std::make_unique<Reader>(period, conf, filename, s, n_axes, axes_indices, axes_names);
+    reader = std::make_unique<Reader>(period, conf, filename, s, n_axes, axes_indices, axes_names, port_name);
 
     if(!reader->start())
       return false;

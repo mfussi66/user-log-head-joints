@@ -35,6 +35,7 @@ class Reader : public PeriodicThread {
     double thread_period_;
     int n_axes_;
     std::string filename_;
+    std::string port_name_;
     std::vector<double> time_vector;
     double t0;
     std::vector<std::vector<double>> joint_encoders;
@@ -60,7 +61,7 @@ class Reader : public PeriodicThread {
 
     Reader(double period, const Property & conf, const std::string & filename,
             const std::vector<std::string> & interfaces, const int n_axes,
-            const std::vector<int>& axes_indices, const std::vector<std::string>& axes_names);
+            const std::vector<int>& axes_indices, const std::vector<std::string>& axes_names, const std::string& port_name);
 
     bool threadInit();
 

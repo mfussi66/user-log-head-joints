@@ -2,7 +2,7 @@
 
 Reader::Reader(double period, const Property & conf, const std::string & filename, 
         const std::vector<std::string> & interfaces, const int n_axes, 
-        const std::vector<int>& axes_indices, const std::vector<std::string>& axes_names)
+        const std::vector<int>& axes_indices, const std::vector<std::string>& axes_names, const std::string& port_name)
 : PeriodicThread(period) {
     n_axes_ = n_axes;
     thread_period_ = period;
@@ -12,6 +12,7 @@ Reader::Reader(double period, const Property & conf, const std::string & filenam
     axes_to_log_.resize(n_axes_);
     axes_to_log_ = axes_indices;
     axes_names_ = axes_names;
+    port_name_ = port_name;
 
 }
 
@@ -82,10 +83,10 @@ bool Reader::threadInit() {
     t0 = Time::now();
 
 
-    if(!port_outs.open("/loggedboard/pid/out:o") ||
-        !port_ref.open("/loggedboard/pid/ref:o") ||
-        !port_fbk.open("/loggedboard/pid/fbk:o") ||
-        !port_fbk.open("/loggedboard/motor/enc:o") ) {
+    if(!port_outs.open(port_name_ + "/pid/out:o") ||
+        !port_ref.open(port_name_ + "/pid/ref:o") ||
+        !port_fbk.open(port_name_ + "/pid/fbk:o") ||
+        !port_fbk.open(port_name_ + "/motor/enc:o") ) {
             yError() << "Could not open one or more ports!";
             return false;
     }
