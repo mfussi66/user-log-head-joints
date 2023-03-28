@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8" ?>
-<portscope rows="2" columns="2" carrier="fast_tcp" no-persistent="1">
+<portscope rows="3" columns="3" carrier="fast_tcp" no-persistent="1">
     <plot gridx="0"
           gridy="0"
           title="Yaw"
@@ -7,46 +7,117 @@
           minval="-50"
           maxval="50"
           bgcolor="white">
-        <graph remote="/ergocub/head/state:o"
-               index="2"
+        <graph remote="/loggedboard/pid/fbk:o"
+               index="0"
                color="Black"
-               title="Yaw" />
+               title="Pitch" />
+        <graph remote="/loggedboard/pid/ref:o"
+               index="0"
+               color="Red"
+               title="Pitch" />
     <plot gridx="1"
           gridy="0"
-          title="Pitch"
+          title="Roll"
           size="60"
           minval="-50"
           maxval="30"
           bgcolor="white">
-        <graph remote="/ergocub/head/state:o"
-               index="0"
+        <graph remote="/loggedboard/pid/fbk:o"
+               index="1"
                color="Black"
+               title="Roll" />
+         <graph remote="/loggedboard/pid/ref:o"
+               index="1"
+               color="Red"
                title="Pitch" />
     </plot>
-    <plot gridx="0"
-          gridy="1"
-          title="Roll"
+    <plot gridx="2"
+          gridy="0"
+          title="Yaw"
           size="60"
           minval="-25"
           maxval="25"
           bgcolor="white">
-        <graph remote="/ergocub/head/state:o"
+        <graph remote="/loggedboard/pid/fbk:o"
+               index="2"
+               color="Black"
+               title="Yaw" />
+        <graph remote="/loggedboard/pid/ref:o"
+               index="2"
+               color="Red"
+               title="Pitch" />
+    </plot>
+
+    <plot gridx="0"
+          gridy="1"
+          title="Yaw"
+          size="60"
+          minval="-50"
+          maxval="50"
+          bgcolor="white">
+        <graph remote="/loggedboard/pid/out:o"
+               index="0"
+               color="Black"
+               title="Pitch" />
+    <plot gridx="1"
+          gridy="1"
+          title="Roll"
+          size="60"
+          minval="-50"
+          maxval="30"
+          bgcolor="white">
+        <graph remote="/loggedboard/pid/out:o"
                index="1"
                color="Black"
                title="Roll" />
     </plot>
-    <plot gridx="1"
+    <plot gridx="2"
           gridy="1"
-          title="Cam tilt"
+          title="Yaw"
           size="60"
-          minval="-35"
-          maxval="35"
+          minval="-25"
+          maxval="25"
           bgcolor="white">
-        <graph remote="/ergocub/head/state:o"
-               index="3"
+        <graph remote="/loggedboard/pid/out:o"
+               index="2"
                color="Black"
-               title="Cam tilt" />
+               title="Yaw" />
     </plot>
 
+    <plot gridx="0"
+          gridy="2"
+          title="Mot0"
+          size="60"
+          minval="-50"
+          maxval="50"
+          bgcolor="white">
+        <graph remote="/loggedboard/motor/enc:o"
+               index="0"
+               color="Black"
+               title="Mot0" />
+    <plot gridx="1"
+          gridy="2"
+          title="Mot1"
+          size="60"
+          minval="-50"
+          maxval="30"
+          bgcolor="white">
+        <graph remote="/loggedboard/motor/enc:o"
+               index="1"
+               color="Black"
+               title="Mot1" />
+    </plot>
+    <plot gridx="2"
+          gridy="2"
+          title="Mot2"
+          size="60"
+          minval="-25"
+          maxval="25"
+          bgcolor="white">
+        <graph remote="/loggedboard/motor/enc:o"
+               index="2"
+               color="Black"
+               title="Mot2" />
+    </plot>
 
 </portscope>
