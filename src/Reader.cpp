@@ -125,6 +125,12 @@ void Reader::threadRelease() {
 
     fout.close();
     driver.close();
+
+    port_fbk.close();
+    port_mot_enc.close();
+    port_outs.close();
+    port_ref.close();
+
     yInfo() << "Done.";
 
     // Close I/O resources
